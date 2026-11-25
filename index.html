@@ -1,0 +1,247 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Preenchedor de LME</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf-lib/1.17.1/pdf-lib.min.js"></script>
+<script src="meds.js"></script>
+<style>
+:root{--bg:#f6f7f9;--card:#fff;--fg:#1c2430;--mut:#5b6676;--line:#d5dae1;--acc:#0b6bcb;--err:#c0392b}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#11151a;--card:#1a2028;--fg:#e6ebf1;--mut:#9aa6b5;--line:#2c3540;--acc:#4ea1f3;--err:#ff7b6b}}
+:root[data-theme="dark"]{--bg:#11151a;--card:#1a2028;--fg:#e6ebf1;--mut:#9aa6b5;--line:#2c3540;--acc:#4ea1f3;--err:#ff7b6b}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--fg);font:15px/1.4 system-ui,-apple-system,Segoe UI,Roboto,sans-serif}
+main{max-width:900px;margin:0 auto;padding:16px}
+h1{font-size:1.35rem;margin:.2em 0}
+p.sub{color:var(--mut);margin:0 0 16px}
+fieldset{background:var(--card);border:1px solid var(--line);border-radius:10px;margin:0 0 14px;padding:12px 14px}
+legend{font-weight:600;padding:0 6px}
+label{display:block;font-size:.85rem;color:var(--mut);margin:6px 0 2px}
+input,textarea,select{width:100%;padding:8px;border:1px solid var(--line);border-radius:7px;background:var(--bg);color:var(--fg);font:inherit}
+textarea{min-height:110px;resize:vertical}
+.row{display:grid;gap:10px;grid-template-columns:repeat(auto-fit,minmax(140px,1fr))}
+.w2{grid-column:span 2}
+.opts{display:flex;flex-wrap:wrap;gap:6px 16px;margin:4px 0}
+.opts label{display:flex;align-items:center;gap:6px;color:var(--fg);font-size:.95rem;margin:0}
+.opts input{width:auto}
+table{width:100%;border-collapse:collapse}
+td{padding:2px}
+td.n{width:22px;color:var(--mut);text-align:center}
+td.q input{padding:6px 4px;text-align:center}
+.medtbl .q{width:52px}
+.cnt{font-size:.8rem;color:var(--mut);text-align:right}
+.cnt.over{color:var(--err)}
+.bar{position:sticky;bottom:0;background:var(--bg);padding:10px 0;display:flex;gap:8px;flex-wrap:wrap;border-top:1px solid var(--line)}
+button{padding:10px 16px;border-radius:8px;border:1px solid var(--line);background:var(--card);color:var(--fg);font:inherit;cursor:pointer}
+button.pri{background:var(--acc);color:#fff;border-color:var(--acc);font-weight:600}
+#msg{color:var(--err);font-size:.9rem;width:100%}
+iframe{width:100%;height:80vh;border:1px solid var(--line);border-radius:8px;margin-top:10px;display:none}
+.hint{font-size:.8rem;color:var(--mut)}
+@media (max-width:600px){.w2{grid-column:auto}.medtbl td.q input{font-size:13px}}
+</style>
+</head>
+<body>
+<main>
+<h1>Preenchedor de LME — CEAF 2026</h1>
+<p class="sub">Preencha os campos e gere o PDF do Laudo de Solicitação. Os dados do médico e do estabelecimento ficam salvos neste navegador; os do paciente, não.</p>
+
+<form id="f" autocomplete="off">
+<fieldset><legend>Médico e estabelecimento</legend>
+ <div class="row">
+  <div><label>1 · CNES *</label><input name="cnes" maxlength="7" inputmode="numeric" data-keep></div>
+  <div class="w2"><label>2 · Estabelecimento de saúde</label><input name="estab" data-keep></div>
+ </div>
+ <div class="row">
+  <div class="w2"><label>14 · Nome do médico solicitante *</label><input name="medico" data-keep></div>
+  <div><label>15 · CNS do médico *</label><input name="cnsmed" maxlength="18" inputmode="numeric" data-keep></div>
+  <div><label>16 · Data *</label><input name="data" type="date"></div>
+ </div>
+</fieldset>
+
+<fieldset><legend>Paciente</legend>
+ <div class="row">
+  <div class="w2"><label>3 · Nome completo *</label><input name="nome"></div>
+  <div><label>5 · Peso (kg) *</label><input name="peso" maxlength="6" inputmode="decimal"></div>
+ </div>
+ <div class="row">
+  <div class="w2"><label>4 · Nome da mãe *</label><input name="mae"></div>
+  <div><label>6 · Altura (cm) *</label><input name="altura" maxlength="3" inputmode="numeric"></div>
+ </div>
+</fieldset>
+
+<fieldset><legend>7–8 · Medicamentos e quantidades *</legend>
+ <p class="hint">Digite parte do nome para buscar na lista oficial do CEAF (ou digite livremente). Botão "=" copia a quantidade do 1º mês para os 6 meses.</p>
+ <datalist id="meds"></datalist>
+ <table class="medtbl"><tbody id="medrows"></tbody></table>
+</fieldset>
+
+<fieldset><legend>Diagnóstico</legend>
+ <div class="row">
+  <div><label>9 · CID-10 *</label><input name="cid" maxlength="5" style="text-transform:uppercase"></div>
+  <div class="w2"><label>10 · Diagnóstico</label><input name="diag"></div>
+ </div>
+ <label>11 · Anamnese *</label><textarea name="anamnese"></textarea>
+ <div class="cnt" id="cntAn"></div>
+ <label>12 · Tratamento prévio / atual? *</label>
+ <div class="opts"><label><input type="radio" name="trat" value="0">Não</label><label><input type="radio" name="trat" value="1">Sim</label></div>
+ <input name="tratdesc" placeholder="Relatar tratamentos (se Sim)">
+</fieldset>
+
+<fieldset><legend>13 · Atestado de capacidade *</legend>
+ <div class="opts"><label><input type="radio" name="incapaz" value="0" checked>Paciente capaz</label><label><input type="radio" name="incapaz" value="1">Incapaz</label></div>
+ <input name="resp" placeholder="Nome do responsável (se incapaz)">
+</fieldset>
+
+<fieldset><legend>Dados complementares (preenchidos pelo paciente/responsável)</legend>
+ <label>18 · Preenchidos por *</label>
+ <div class="opts">
+  <label><input type="radio" name="por" value="0">Paciente</label><label><input type="radio" name="por" value="1">Mãe</label>
+  <label><input type="radio" name="por" value="2">Responsável</label><label><input type="radio" name="por" value="3">Médico</label>
+  <label><input type="radio" name="por" value="4">Outro</label><label><input type="radio" name="por" value="" checked>Deixar em branco</label>
+ </div>
+ <div class="row"><div class="w2"><input name="outronome" placeholder="Outro: nome"></div><div><input name="outrocpf" placeholder="Outro: CPF"></div></div>
+ <label>19 · Raça/Cor/Etnia</label>
+ <div class="opts">
+  <label><input type="radio" name="raca" value="0">Branca</label><label><input type="radio" name="raca" value="2">Preta</label>
+  <label><input type="radio" name="raca" value="4">Parda</label><label><input type="radio" name="raca" value="1">Amarela</label>
+  <label><input type="radio" name="raca" value="3">Indígena</label><label><input type="radio" name="raca" value="" checked>Em branco</label>
+ </div>
+ <input name="etnia" placeholder="Etnia (se indígena)">
+ <div class="row">
+  <div><label>20 · Telefone 1</label><input name="tel1" inputmode="tel"></div>
+  <div><label>20 · Telefone 2</label><input name="tel2" inputmode="tel"></div>
+ </div>
+ <label>21 · Documento do paciente</label>
+ <div class="opts"><label><input type="radio" name="doctipo" value="0">CPF</label><label><input type="radio" name="doctipo" value="1">CNS</label><label><input type="radio" name="doctipo" value="" checked>Em branco</label></div>
+ <input name="docnum" inputmode="numeric" placeholder="Número">
+ <label>22 · E-mail do paciente</label><input name="email" type="email">
+</fieldset>
+
+<div class="bar">
+ <button type="button" class="pri" id="gen">Gerar PDF</button>
+ <button type="button" id="prev">Pré-visualizar</button>
+ <button type="button" id="novo">Novo paciente</button>
+ <div id="msg"></div>
+</div>
+</form>
+<iframe id="pv" title="Pré-visualização"></iframe>
+</main>
+
+<script>
+const F=document.getElementById('f'), $=n=>F.elements[n];
+// lista de medicamentos
+document.getElementById('meds').innerHTML=(window.MEDS||[]).map(m=>`<option value="${m.replace(/"/g,'&quot;')}">`).join('');
+const rows=document.getElementById('medrows');
+for(let i=1;i<=6;i++){
+  rows.insertAdjacentHTML('beforeend',`<tr><td class="n">${i}</td><td><input name="med${i}" list="meds" placeholder="Medicamento ${i}"></td>`+
+   [1,2,3,4,5,6].map(m=>`<td class="q"><input name="q${i}_${m}" maxlength="4" inputmode="numeric" placeholder="${m}º"></td>`).join('')+
+   `<td><button type="button" data-cp="${i}" title="Repetir 1º mês" style="padding:6px 8px">=</button></td></tr>`);
+}
+rows.addEventListener('click',e=>{const i=e.target.dataset.cp;if(!i)return;const v=$(`q${i}_1`).value;for(let m=2;m<=6;m++)$(`q${i}_${m}`).value=v;});
+$('data').valueAsDate=new Date(Date.now()-new Date().getTimezoneOffset()*6e4);
+
+// persistência dos dados do médico
+const KEY='lme-medico';
+try{const s=JSON.parse(localStorage.getItem(KEY)||'{}');for(const k in s)if($(k))$(k).value=s[k];}catch(e){}
+F.addEventListener('input',e=>{
+  if(e.target.hasAttribute('data-keep')){try{const s={};F.querySelectorAll('[data-keep]').forEach(x=>s[x.name]=x.value);localStorage.setItem(KEY,JSON.stringify(s));}catch(_){}}
+  updCnt();
+});
+function updCnt(){const n=$('anamnese').value.length,el=document.getElementById('cntAn');el.textContent=n+' caracteres'+(n>900?' — texto longo, a fonte será reduzida':'');el.className='cnt'+(n>1400?' over':'');}
+updCnt();
+document.getElementById('novo').onclick=()=>{if(!confirm('Limpar dados do paciente?'))return;
+  F.querySelectorAll('input,textarea').forEach(x=>{if(x.hasAttribute('data-keep')||x.name==='data')return;if(x.type==='radio')x.checked=x.defaultChecked;else x.value='';});updCnt();};
+
+const val=n=>{const e=$(n);if(!e)return '';if(e instanceof RadioNodeList)return e.value;return e.value.trim();};
+
+function validar(){
+  const req={cnes:'CNES',nome:'Nome do paciente',mae:'Nome da mãe',peso:'Peso',altura:'Altura',med1:'Medicamento 1',cid:'CID-10',anamnese:'Anamnese',trat:'Tratamento prévio',medico:'Médico',cnsmed:'CNS do médico',data:'Data'};
+  return Object.entries(req).filter(([k])=>!val(k)).map(([,v])=>v);
+}
+
+// ---------- geração do PDF ----------
+// coordenadas (pontos PDF, origem inferior esquerda) obtidas dos campos do formulário oficial
+const COLS=[370,400,434,467,498,529], COLW=[29,34,32,30,30,32];
+const ROWY=[544,525,506,489,470,451];
+const RADIO={
+  trat:{0:[46,324],1:[88,324]}, incapaz:{0:[46,266],1:[84,266]},
+  por:{0:[229,163],1:[277,163],2:[354,163],3:[484,164],4:[45,149]},
+  raca:{0:[45,118],1:[98,116],2:[45,106],3:[98,103],4:[45,91]},
+  doctipo:{0:[45,65],1:[88,65]}
+};
+let BASE=null;
+async function base(){ if(!BASE){const r=await fetch('lme-2026.pdf');if(!r.ok)throw new Error('Não foi possível carregar o formulário em branco');BASE=await r.arrayBuffer();} return BASE; }
+
+function fit(font,t,size,w,min=6){while(size>min&&font.widthOfTextAtSize(t,size)>w)size-=.25;return size;}
+function safe(font,t){return [...(t||'')].map(c=>{try{font.encodeText(c);return c;}catch(e){return '?';}}).join('');}
+
+function wrap(font,text,size,w){
+  const out=[];for(const para of text.split(/\n/)){let line='';for(const word of para.split(/\s+/)){const t=line?line+' '+word:word;
+    if(font.widthOfTextAtSize(t,size)<=w)line=t;else{if(line)out.push(line);line=word;}}out.push(line);}return out;
+}
+
+async function gerar(){
+  const {PDFDocument,StandardFonts,rgb,PDFName}=PDFLib;
+  const doc=await PDFDocument.load(await base());
+  const pg=doc.getPage(0);
+  // remove campos interativos (botões, menus) — o layout impresso está no conteúdo da página
+  pg.node.delete(PDFName.of('Annots')); doc.catalog.delete(PDFName.of('AcroForm'));
+  const font=await doc.embedFont(StandardFonts.Helvetica), bold=await doc.embedFont(StandardFonts.HelveticaBold);
+  const ink=rgb(0,0,.35);
+  const txt=(t,x,y,w,size=10,f=font)=>{t=safe(f,String(t||''));if(!t)return;const s=fit(f,t,size,w);pg.drawText(t,{x,y,size:s,font:f,color:ink});};
+  const mark=(grp,v)=>{const p=RADIO[grp][v];if(!p)return;pg.drawText('X',{x:p[0]+.6,y:p[1]+1.2,size:8.5,font:bold,color:ink});};
+
+  txt(val('cnes'),42,649,160,11);
+  txt(val('estab'),210,649,343);
+  txt(val('nome'),40,621,424,11);
+  txt(val('peso'),483,620,52);
+  txt(val('mae'),42,595,421,11);
+  txt(val('altura'),484,594,52);
+  for(let i=1;i<=6;i++){
+    const y=ROWY[i-1]+5;
+    txt(val('med'+i),60,y,306,9);
+    for(let m=1;m<=6;m++){const q=val(`q${i}_${m}`);if(q){const s=fit(font,q,9,COLW[m-1]-3);const w=font.widthOfTextAtSize(q,s);pg.drawText(safe(font,q),{x:COLS[m-1]+(COLW[m-1]-w)/2,y,size:s,font,color:ink});}}
+  }
+  txt(val('cid').toUpperCase(),42,424,58,11,bold);
+  txt(val('diag'),108,424,450);
+  // anamnese com quebra de linha e redução de fonte
+  const an=safe(font,val('anamnese')); if(an){
+    const W=520,H=46; let s=9,lines;
+    for(;s>=5;s-=.25){lines=wrap(font,an,s,W);if(lines.length*s*1.15<=H)break;}
+    let y=402-s; lines.forEach(l=>{pg.drawText(l,{x:40,y,size:s,font,color:ink});y-=s*1.15;});
+  }
+  if(val('trat')!=='')mark('trat',val('trat'));
+  txt(val('tratdesc'),146,326,410,9);
+  if(val('incapaz')!=='')mark('incapaz',val('incapaz'));
+  txt(val('resp'),314,268,244,9);
+  txt(val('medico'),39,220,348,11);
+  txt(val('cnsmed'),39,191,248,11);
+  const d=val('data'); if(d){const [Y,M,D]=d.split('-');txt(`${D}/${M}/${Y}`,297,191,75,11);}
+  if(val('por')!=='')mark('por',val('por'));
+  txt(val('outronome'),134,152,222,9);
+  txt(val('outrocpf'),380,150,184,9);
+  if(val('raca')!=='')mark('raca',val('raca'));
+  txt(val('etnia'),198,108,170,9);
+  txt(val('tel1'),384,115,174);
+  txt(val('tel2'),384,95,174);
+  if(val('doctipo')!=='')mark('doctipo',val('doctipo'));
+  txt(val('docnum'),180,64,190);
+  txt(val('email'),42,41,330);
+  return await doc.save();
+}
+
+const msg=document.getElementById('msg');
+async function run(download){
+  const falta=validar(); msg.textContent=falta.length?'Atenção — campos obrigatórios vazios: '+falta.join(', '):'';
+  try{
+    const bytes=await gerar(); const url=URL.createObjectURL(new Blob([bytes],{type:'application/pdf'}));
+    if(download){const a=document.createElement('a');a.href=url;a.download='LME - '+(val('nome')||'paciente')+'.pdf';document.body.appendChild(a);a.click();a.remove();}
+    else{const f=document.getElementById('pv');f.src=url;f.style.display='block';f.scrollIntoView({behavior:'smooth'});}
+  }catch(e){msg.textContent='Erro: '+e.message;}
+}
+document.getElementById('gen').onclick=()=>run(true);
+document.getElementById('prev').onclick=()=>run(false);
+</script>
+</body>
+</html>
