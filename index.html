@@ -236,7 +236,10 @@ async function run(download){
   const falta=validar(); msg.textContent=falta.length?'Atenção — campos obrigatórios vazios: '+falta.join(', '):'';
   try{
     const bytes=await gerar(); const url=URL.createObjectURL(new Blob([bytes],{type:'application/pdf'}));
-    if(download){const a=document.createElement('a');a.href=url;a.download='LME - '+(val('nome')||'paciente')+'.pdf';document.body.appendChild(a);a.click();a.remove();}
+    if(download){const fn='LME - '+(val('nome')||'paciente').replace(/[\\/:*?"<>|]/g,'')+'.pdf';
+      const dl=window.claude&&window.claude.use?await window.claude.use('downloads'):null;
+      if(dl){try{await dl.save({filename:fn,data:new Blob([bytes],{type:'application/pdf'})});}catch(e){if(e&&e.code!=='declined')msg.textContent='Não foi possível salvar: '+(e.message||e.code);}}
+      else{const a=document.createElement('a');a.href=url;a.download=fn;document.body.appendChild(a);a.click();a.remove();}}
     else{const f=document.getElementById('pv');f.src=url;f.style.display='block';f.scrollIntoView({behavior:'smooth'});}
   }catch(e){msg.textContent='Erro: '+e.message;}
 }
